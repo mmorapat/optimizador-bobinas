@@ -4,6 +4,55 @@ import time
 import importlib
 import sys
 
+# ====================================
+# PROTECCIÓN CON CONTRASEÑA
+# ====================================
+def check_password():
+    """Verifica la contraseña antes de mostrar la app"""
+    
+    def password_entered():
+        if st.session_state["password"] == st.secrets.get("password", "Optimizador05"):
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # Primera vez - pedir contraseña
+        st.title("🔐 Acceso Restringido")
+        st.markdown("### Optimizador de Bobinas - Versión Beta")
+        st.text_input(
+            "Introduce la contraseña:", 
+            type="password", 
+            on_change=password_entered, 
+            key="password"
+        )
+        st.caption("Contacta al administrador si necesitas acceso")
+        return False
+    elif not st.session_state["password_correct"]:
+        # Contraseña incorrecta
+        st.title("🔐 Acceso Restringido")
+        st.markdown("### Optimizador de Bobinas - Versión Beta")
+        st.text_input(
+            "Introduce la contraseña:", 
+            type="password", 
+            on_change=password_entered, 
+            key="password"
+        )
+        st.error("❌ Contraseña incorrecta")
+        return False
+    else:
+        # Contraseña correcta
+        return True
+
+# Verificar contraseña antes de mostrar la app
+if not check_password():
+    st.stop()
+
+# ====================================
+# RESTO DE TU CÓDIGO AQUÍ
+# ====================================
+
 # Configuración de página PRIMERO
 st.set_page_config(page_title="Optimizador de Bobinas", layout="wide")
 
