@@ -67,11 +67,11 @@ from visualizador_bobinas import visualizar_bobinas, visualizar_bobinas_detallad
 st.header("Optimizador de Asignación de Bobinas - ILP")
 st.caption("🔬 Optimización Matemática - Garantiza el MÍNIMO número de bobinas")
 
-# Estructura vacía para desarrollos
-estructura_desarrollos = pd.DataFrame(columns=['ANCHO', 'ESPESOR', 'KG', 'ALEACION', 'ESTADO'])
+# Estructura vacía para desarrollos (orden correcto de columnas)
+estructura_desarrollos = pd.DataFrame(columns=['ALEACION', 'ESTADO', 'ANCHO', 'ESPESOR', 'KG'])
 
-# Estructura vacía para pedidos
-estructura_pedidos = pd.DataFrame(columns=['PEDIDO', 'ANCHO', 'KG', 'ALEACION', 'ESTADO', 'ESPESOR', 'ML_MINIMOS'])
+# Estructura vacía para pedidos (orden correcto de columnas)
+estructura_pedidos = pd.DataFrame(columns=['PEDIDO', 'COLOR', 'ALEACION', 'ESTADO', 'ANCHO', 'ESPESOR', 'KG', 'ML'])
 
 # Inicializar datos VACÍOS en session_state
 if 'df_desarrollos' not in st.session_state:
@@ -90,11 +90,21 @@ with st.sidebar:
     # RESTRICCIONES
     # ========================================
     with st.expander("🔧 Restricciones", expanded=True):
+        desperdicio_bordes_minimo = st.number_input(
+            "Desperdicio en bordes mínimo (mm)", 
+            0, 50, 0, 1,
+            help="Desperdicio mínimo de seguridad requerido en los bordes para las máquinas de corte (0 = sin restricción)"
+        )
+        
         desperdicio_bordes_maximo = st.number_input(
             "Desperdicio en bordes máximo (mm)", 
             0, 100, 40, 5,
             help="Desperdicio máximo de borde permitido en el ancho de la bobina (espacio que queda sin usar)"
         )
+        
+        # Validación de compatibilidad
+        if desperdicio_bordes_minimo > desperdicio_bordes_maximo:
+            st.error(f"⚠️ ERROR: Desperdicio mínimo ({desperdicio_bordes_minimo}mm) no puede ser mayor que el máximo ({desperdicio_bordes_maximo}mm)")
         
         margen_exceso_pedidos = st.number_input(
             "Margen Exceso Pedidos (%)", 
@@ -139,7 +149,7 @@ with st.sidebar:
         relajacion_ml_minimos_porcentaje = st.number_input(
             "% relajación para cumplir los ml minimos por bobina", 
             0, 50, 50, 5,
-            help="Porcentaje de relajación del requisito ML_MINIMOS. Con 10%, si pedido requiere 3000ml acepta desde 2700ml (solo hacia abajo)"
+            help="Porcentaje de relajación del requisito ML. Con 10%, si pedido requiere 3000ml acepta desde 2700ml (solo hacia abajo)"
         )
         
         ml_minimo_resto = st.number_input(
@@ -183,99 +193,193 @@ with tab_entrada:
     with col_dev:
         st.caption("🧵 **Desarrollos**")
         
-        col_import, col_save = st.columns([3, 1])
-        
-        with col_import:
-            with st.expander("📤 Drag and drop file here", expanded=False):
-                st.caption("Límit 200MB per file • CSV, XLSX, XLS")
-                uploaded_dev = st.file_uploader(
-                    "Browse files",
-                    type=['csv', 'xlsx', 'xls'],
-                    key='upload_desarrollos',
-                    label_visibility='collapsed'
-                )
-                
-                if uploaded_dev:
-                    try:
-                        if uploaded_dev.name.endswith('.csv'):
-                            df_desarrollos_cargado = pd.read_csv(uploaded_dev)
-                        else:
-                            df_desarrollos_cargado = pd.read_excel(uploaded_dev)
-                        
-                        df_desarrollos_cargado['ALEACION'] = df_desarrollos_cargado['ALEACION'].astype(str)
-                        df_desarrollos_cargado['ESTADO'] = df_desarrollos_cargado['ESTADO'].astype(str)
-                        
-                        st.session_state.df_desarrollos = df_desarrollos_cargado
-                        st.success(f"✅ {len(df_desarrollos_cargado)} desarrollos cargados")
-                    except Exception as e:
-                        st.error(f"Error al cargar archivo: {str(e)}")
-        
-        with col_save:
-            # Botón alineado a la altura del expander
-            st.button("💾 Guardar", key='btn_save_dev', use_container_width=True, type="secondary", 
-                     on_click=lambda: st.session_state.update({'df_desarrollos': st.session_state.get('temp_edited_desarrollos', st.session_state.df_desarrollos)}))
+        with st.expander("📤 Drag and drop file here", expanded=False):
+            st.caption("Límit 200MB per file • CSV, XLSX, XLS")
+            uploaded_dev = st.file_uploader(
+                "Browse files",
+                type=['csv', 'xlsx', 'xls'],
+                key='upload_desarrollos',
+                label_visibility='collapsed'
+            )
+            
+            if uploaded_dev:
+                try:
+                    if uploaded_dev.name.endswith('.csv'):
+                        df_desarrollos_cargado = pd.read_csv(uploaded_dev)
+                    else:
+                        df_desarrollos_cargado = pd.read_excel(uploaded_dev)
+                    
+                    # Convertir columnas de texto a string
+                    df_desarrollos_cargado['ALEACION'] = df_desarrollos_cargado['ALEACION'].astype(str)
+                    df_desarrollos_cargado['ESTADO'] = df_desarrollos_cargado['ESTADO'].astype(str)
+                    
+                    # Limpiar y convertir columnas numéricas (comas a puntos)
+                    for col in ['ANCHO', 'ESPESOR', 'KG']:
+                        if col in df_desarrollos_cargado.columns:
+                            # Reemplazar comas por puntos y convertir a float
+                            df_desarrollos_cargado[col] = df_desarrollos_cargado[col].astype(str).str.replace(',', '.')
+                            df_desarrollos_cargado[col] = pd.to_numeric(df_desarrollos_cargado[col], errors='coerce').fillna(0).astype('float64')
+                    
+                    st.session_state.df_desarrollos = df_desarrollos_cargado
+                    st.success(f"✅ {len(df_desarrollos_cargado)} desarrollos cargados")
+                except Exception as e:
+                    st.error(f"Error al cargar archivo: {str(e)}")
         
         # EDITOR EDITABLE con altura mayor (600px)
         edited_desarrollos = st.data_editor(
-            st.session_state.df_desarrollos, 
+            st.session_state.df_desarrollos.reset_index(drop=True),  # Resetear índice
             use_container_width=True, 
             height=600,
-            num_rows="dynamic"
+            num_rows="dynamic",
+            key="data_editor_dev",
+            hide_index=True,  # Ocultar columna de índice
+            column_config={
+                "ANCHO": st.column_config.NumberColumn(
+                    "ANCHO",
+                    help="Ancho del desarrollo en mm (puede ser decimal, ej: 1250.5)",
+                    format="%.2f",
+                    step=0.01,
+                    min_value=0
+                ),
+                "ESPESOR": st.column_config.NumberColumn(
+                    "ESPESOR",
+                    help="Espesor en mm",
+                    format="%.2f",
+                    step=0.01,
+                    min_value=0
+                ),
+                "KG": st.column_config.NumberColumn(
+                    "KG",
+                    help="Kilogramos disponibles",
+                    format="%.2f",
+                    step=0.01,
+                    min_value=0
+                )
+            }
         )
         
-        # Guardar ediciones en variable temporal
-        st.session_state.temp_edited_desarrollos = edited_desarrollos
-        
-        st.caption(f"✅ {len(st.session_state.df_desarrollos)} desarrollos cargados")
+        # Botón discreto al lado del caption
+        col_caption, col_btn = st.columns([3, 1])
+        with col_caption:
+            st.caption(f"📊 {len(edited_desarrollos)} desarrollos")
+        with col_btn:
+            if st.button("💾 Guardar", key='btn_save_dev', type="secondary", use_container_width=True):
+                # Procesar datos
+                df_temp = edited_desarrollos.copy()
+                df_temp['ALEACION'] = df_temp['ALEACION'].astype(str)
+                df_temp['ESTADO'] = df_temp['ESTADO'].astype(str)
+                
+                for col in ['ANCHO', 'ESPESOR', 'KG']:
+                    if col in df_temp.columns:
+                        df_temp[col] = df_temp[col].astype(str).str.replace(',', '.')
+                        df_temp[col] = pd.to_numeric(df_temp[col], errors='coerce').fillna(0).astype('float64')
+                
+                # Resetear índice para que sea consecutivo
+                df_temp = df_temp.reset_index(drop=True)
+                st.session_state.df_desarrollos = df_temp
+                st.rerun()  # FORZAR recarga para que el editor se recree
     
     with col_ped:
         st.caption("📦 **Pedidos**")
         
-        col_import, col_save = st.columns([3, 1])
-        
-        with col_import:
-            with st.expander("📤 Drag and drop file here", expanded=False):
-                st.caption("Límit 200MB per file • CSV, XLSX, XLS")
-                uploaded_ped = st.file_uploader(
-                    "Browse files",
-                    type=['csv', 'xlsx', 'xls'],
-                    key='upload_pedidos',
-                    label_visibility='collapsed'
-                )
-                
-                if uploaded_ped:
-                    try:
-                        if uploaded_ped.name.endswith('.csv'):
-                            df_pedidos_cargado = pd.read_csv(uploaded_ped)
-                        else:
-                            df_pedidos_cargado = pd.read_excel(uploaded_ped)
-                        
-                        df_pedidos_cargado['PEDIDO'] = df_pedidos_cargado['PEDIDO'].astype(str)
-                        df_pedidos_cargado['ALEACION'] = df_pedidos_cargado['ALEACION'].astype(str)
-                        df_pedidos_cargado['ESTADO'] = df_pedidos_cargado['ESTADO'].astype(str)
-                        
-                        st.session_state.df_pedidos = df_pedidos_cargado
-                        st.success(f"✅ {len(df_pedidos_cargado)} pedidos cargados")
-                    except Exception as e:
-                        st.error(f"Error al cargar archivo: {str(e)}")
-        
-        with col_save:
-            # Botón alineado a la altura del expander
-            st.button("💾 Guardar", key='btn_save_ped', use_container_width=True, type="secondary",
-                     on_click=lambda: st.session_state.update({'df_pedidos': st.session_state.get('temp_edited_pedidos', st.session_state.df_pedidos)}))
+        with st.expander("📤 Drag and drop file here", expanded=False):
+            st.caption("Límit 200MB per file • CSV, XLSX, XLS")
+            uploaded_ped = st.file_uploader(
+                "Browse files",
+                type=['csv', 'xlsx', 'xls'],
+                key='upload_pedidos',
+                label_visibility='collapsed'
+            )
+            
+            if uploaded_ped:
+                try:
+                    if uploaded_ped.name.endswith('.csv'):
+                        df_pedidos_cargado = pd.read_csv(uploaded_ped)
+                    else:
+                        df_pedidos_cargado = pd.read_excel(uploaded_ped)
+                    
+                    # Convertir columnas de texto a string
+                    df_pedidos_cargado['PEDIDO'] = df_pedidos_cargado['PEDIDO'].astype(str)
+                    df_pedidos_cargado['ALEACION'] = df_pedidos_cargado['ALEACION'].astype(str)
+                    df_pedidos_cargado['ESTADO'] = df_pedidos_cargado['ESTADO'].astype(str)
+                    if 'COLOR' in df_pedidos_cargado.columns:
+                        df_pedidos_cargado['COLOR'] = df_pedidos_cargado['COLOR'].astype(str)
+                    
+                    # Limpiar y convertir columnas numéricas (comas a puntos)
+                    for col in ['ANCHO', 'ESPESOR', 'KG', 'ML']:
+                        if col in df_pedidos_cargado.columns:
+                            # Reemplazar comas por puntos y convertir a float
+                            df_pedidos_cargado[col] = df_pedidos_cargado[col].astype(str).str.replace(',', '.')
+                            df_pedidos_cargado[col] = pd.to_numeric(df_pedidos_cargado[col], errors='coerce').fillna(0).astype('float64')
+                    
+                    st.session_state.df_pedidos = df_pedidos_cargado
+                    st.success(f"✅ {len(df_pedidos_cargado)} pedidos cargados")
+                except Exception as e:
+                    st.error(f"Error al cargar archivo: {str(e)}")
         
         # EDITOR EDITABLE con altura mayor (600px)
         edited_pedidos = st.data_editor(
-            st.session_state.df_pedidos, 
+            st.session_state.df_pedidos.reset_index(drop=True),  # Resetear índice
             use_container_width=True, 
             height=600,
-            num_rows="dynamic"
+            num_rows="dynamic",
+            key="data_editor_ped",
+            hide_index=True,  # Ocultar columna de índice
+            column_config={
+                "ANCHO": st.column_config.NumberColumn(
+                    "ANCHO",
+                    help="Ancho del pedido en mm (puede ser decimal, ej: 390.5)",
+                    format="%.2f",
+                    step=0.01,
+                    min_value=0
+                ),
+                "ESPESOR": st.column_config.NumberColumn(
+                    "ESPESOR",
+                    help="Espesor en mm",
+                    format="%.2f",
+                    step=0.01,
+                    min_value=0
+                ),
+                "KG": st.column_config.NumberColumn(
+                    "KG",
+                    help="Kilogramos",
+                    format="%.2f",
+                    step=0.01,
+                    min_value=0
+                ),
+                "ML": st.column_config.NumberColumn(
+                    "ML",
+                    help="Metros lineales mínimos",
+                    format="%.0f",
+                    step=1,
+                    min_value=0
+                )
+            }
         )
         
-        # Guardar ediciones en variable temporal
-        st.session_state.temp_edited_pedidos = edited_pedidos
-        
-        st.caption(f"✅ {len(st.session_state.df_pedidos)} pedidos cargados")
+        # Botón discreto al lado del caption
+        col_caption, col_btn = st.columns([3, 1])
+        with col_caption:
+            st.caption(f"📊 {len(edited_pedidos)} pedidos")
+        with col_btn:
+            if st.button("💾 Guardar", key='btn_save_ped', type="secondary", use_container_width=True):
+                # Procesar datos
+                df_temp = edited_pedidos.copy()
+                df_temp['PEDIDO'] = df_temp['PEDIDO'].astype(str)
+                df_temp['ALEACION'] = df_temp['ALEACION'].astype(str)
+                df_temp['ESTADO'] = df_temp['ESTADO'].astype(str)
+                if 'COLOR' in df_temp.columns:
+                    df_temp['COLOR'] = df_temp['COLOR'].astype(str)
+                
+                for col in ['ANCHO', 'ESPESOR', 'KG', 'ML']:
+                    if col in df_temp.columns:
+                        df_temp[col] = df_temp[col].astype(str).str.replace(',', '.')
+                        df_temp[col] = pd.to_numeric(df_temp[col], errors='coerce').fillna(0).astype('float64')
+                
+                # Resetear índice para que sea consecutivo
+                df_temp = df_temp.reset_index(drop=True)
+                st.session_state.df_pedidos = df_temp
+                st.rerun()  # FORZAR recarga para que el editor se recree
 
 # ========================================
 # TAB: OPTIMIZAR
@@ -293,9 +397,91 @@ with tab_optimizar:
                 tiempo_inicio = time.time()
                 
                 try:
+                    # ========================================
+                    # LIMPIAR DATOS: Convertir comas a puntos y manejar valores vacíos
+                    # ========================================
+                    def limpiar_datos_numericos(df, columnas_numericas):
+                        """
+                        Convierte comas decimales a puntos y maneja valores vacíos/nulos
+                        - Reemplaza None, 'None', '', NaN por 0
+                        - Convierte comas a puntos
+                        - Convierte a float
+                        """
+                        df_limpio = df.copy()
+                        
+                        for col in columnas_numericas:
+                            if col in df_limpio.columns:
+                                # Paso 1: Reemplazar valores nulos/vacíos
+                                df_limpio[col] = df_limpio[col].replace(['None', 'none', '', ' ', 'nan', 'NaN'], pd.NA)
+                                df_limpio[col] = df_limpio[col].fillna(0)
+                                
+                                # Paso 2: Convertir a string y reemplazar comas por puntos
+                                df_limpio[col] = df_limpio[col].astype(str).str.strip()
+                                df_limpio[col] = df_limpio[col].str.replace(',', '.')
+                                
+                                # Paso 3: Convertir a float (ahora seguro que no hay None)
+                                df_limpio[col] = pd.to_numeric(df_limpio[col], errors='coerce').fillna(0)
+                        
+                        return df_limpio
+                    
+                    # Limpiar desarrollos
+                    df_desarrollos_limpio = limpiar_datos_numericos(
+                        st.session_state.df_desarrollos,
+                        columnas_numericas=['ANCHO', 'ESPESOR', 'KG']
+                    )
+                    
+                    # Contar filas antes de eliminar
+                    filas_originales_dev = len(df_desarrollos_limpio)
+                    
+                    # Eliminar filas con valores críticos en 0 (opcional pero recomendado)
+                    df_desarrollos_limpio = df_desarrollos_limpio[
+                        (df_desarrollos_limpio['ANCHO'] > 0) & 
+                        (df_desarrollos_limpio['ESPESOR'] > 0) & 
+                        (df_desarrollos_limpio['KG'] > 0)
+                    ]
+                    
+                    # Informar si se eliminaron filas
+                    filas_eliminadas_dev = filas_originales_dev - len(df_desarrollos_limpio)
+                    if filas_eliminadas_dev > 0:
+                        st.warning(f"⚠️ Se eliminaron {filas_eliminadas_dev} desarrollos con valores vacíos o cero")
+                    
+                    # Limpiar pedidos
+                    df_pedidos_limpio = limpiar_datos_numericos(
+                        st.session_state.df_pedidos,
+                        columnas_numericas=['ANCHO', 'KG', 'ESPESOR', 'ML']
+                    )
+                    
+                    # Contar filas antes de eliminar
+                    filas_originales_ped = len(df_pedidos_limpio)
+                    
+                    # Eliminar filas con valores críticos en 0 (opcional pero recomendado)
+                    df_pedidos_limpio = df_pedidos_limpio[
+                        (df_pedidos_limpio['ANCHO'] > 0) & 
+                        (df_pedidos_limpio['KG'] > 0) & 
+                        (df_pedidos_limpio['ESPESOR'] > 0)
+                    ]
+                    
+                    # Informar si se eliminaron filas
+                    filas_eliminadas_ped = filas_originales_ped - len(df_pedidos_limpio)
+                    if filas_eliminadas_ped > 0:
+                        st.warning(f"⚠️ Se eliminaron {filas_eliminadas_ped} pedidos con valores vacíos o cero")
+                    
+                    # Verificar que hay datos después de limpiar
+                    if len(df_desarrollos_limpio) == 0:
+                        st.error("❌ No hay desarrollos válidos después de limpiar los datos. Verifica que no haya celdas vacías.")
+                        st.stop()
+                    
+                    if len(df_pedidos_limpio) == 0:
+                        st.error("❌ No hay pedidos válidos después de limpiar los datos. Verifica que no haya celdas vacías.")
+                        st.stop()
+                    
+                    # ========================================
+                    # OPTIMIZAR con datos limpios
+                    # ========================================
                     resultado = optimizar_ilp(
-                        df_desarrollos=st.session_state.df_desarrollos,
-                        df_pedidos=st.session_state.df_pedidos,
+                        df_desarrollos=df_desarrollos_limpio,
+                        df_pedidos=df_pedidos_limpio,
+                        desperdicio_bordes_minimo=desperdicio_bordes_minimo,
                         desperdicio_bordes_maximo=desperdicio_bordes_maximo,
                         margen_exceso=1 + (margen_exceso_pedidos / 100),  # Convertir % a factor
                         kg_max_bobina=kg_max_bobina,
@@ -341,8 +527,8 @@ with tab_optimizar:
         
         cumplimiento_data = []
         for pedido_id in st.session_state.df_pedidos['PEDIDO']:
-            kg_asignado = pedidos_asignados.get(pedido_id, 0)
-            kg_solicitado = pedidos_solicitados.get(pedido_id, 0)
+            kg_asignado = float(pedidos_asignados.get(pedido_id, 0))
+            kg_solicitado = float(pedidos_solicitados.get(pedido_id, 0))
             porcentaje = (kg_asignado / kg_solicitado * 100) if kg_solicitado > 0 else 0
             cumplimiento_data.append({
                 'PEDIDO': pedido_id,

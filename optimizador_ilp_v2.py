@@ -19,6 +19,7 @@ class OptimizadorILP:
     """
     
     def __init__(self,
+                 desperdicio_bordes_minimo: int = 0,
                  desperdicio_bordes_maximo: int = 30,
                  kg_max_bobina: int = 4000,
                  kg_min_bobina: int = 200,
@@ -32,6 +33,7 @@ class OptimizadorILP:
                  factor_penalizacion_desperdicio: float = 0.0,
                  debug: bool = True):
         
+        self.desperdicio_bordes_minimo = desperdicio_bordes_minimo
         self.desperdicio_bordes_maximo = desperdicio_bordes_maximo
         self.kg_max_bobina = kg_max_bobina
         self.kg_min_bobina = kg_min_bobina
@@ -204,7 +206,7 @@ class OptimizadorILP:
                 ancho_usado = num_cortes * pedido['ancho']
                 desperdicio = desarrollo['ancho'] - ancho_usado
                 
-                if 0 <= desperdicio <= self.desperdicio_bordes_maximo:
+                if self.desperdicio_bordes_minimo <= desperdicio <= self.desperdicio_bordes_maximo:
                     configuraciones.append({
                         'cortes': {pedido['id']: num_cortes},
                         'ancho_usado': ancho_usado
@@ -220,7 +222,7 @@ class OptimizadorILP:
                         if ancho_usado <= desarrollo['ancho']:
                             desperdicio = desarrollo['ancho'] - ancho_usado
                             
-                            if 0 <= desperdicio <= self.desperdicio_bordes_maximo:
+                            if self.desperdicio_bordes_minimo <= desperdicio <= self.desperdicio_bordes_maximo:
                                 configuraciones.append({
                                     'cortes': {
                                         pedido1['id']: n1,
@@ -243,7 +245,7 @@ class OptimizadorILP:
                                 if ancho_usado <= desarrollo['ancho']:
                                     desperdicio = desarrollo['ancho'] - ancho_usado
                                     
-                                    if 0 <= desperdicio <= self.desperdicio_bordes_maximo:
+                                    if self.desperdicio_bordes_minimo <= desperdicio <= self.desperdicio_bordes_maximo:
                                         configuraciones.append({
                                             'cortes': {
                                                 pedido1['id']: n1,
@@ -271,7 +273,7 @@ class OptimizadorILP:
                                             if ancho_usado <= desarrollo['ancho']:
                                                 desperdicio = desarrollo['ancho'] - ancho_usado
                                                 
-                                                if 0 <= desperdicio <= self.desperdicio_bordes_maximo:
+                                                if self.desperdicio_bordes_minimo <= desperdicio <= self.desperdicio_bordes_maximo:
                                                     configuraciones.append({
                                                         'cortes': {
                                                             pedido1['id']: n1,
@@ -303,7 +305,7 @@ class OptimizadorILP:
                                                     if ancho_usado <= desarrollo['ancho']:
                                                         desperdicio = desarrollo['ancho'] - ancho_usado
                                                         
-                                                        if 0 <= desperdicio <= self.desperdicio_bordes_maximo:
+                                                        if self.desperdicio_bordes_minimo <= desperdicio <= self.desperdicio_bordes_maximo:
                                                             configuraciones.append({
                                                                 'cortes': {
                                                                     pedido1['id']: n1,
@@ -338,7 +340,7 @@ class OptimizadorILP:
                                                         if ancho_usado <= desarrollo['ancho']:
                                                             desperdicio = desarrollo['ancho'] - ancho_usado
                                                             
-                                                            if 0 <= desperdicio <= self.desperdicio_bordes_maximo:
+                                                            if self.desperdicio_bordes_minimo <= desperdicio <= self.desperdicio_bordes_maximo:
                                                                 configuraciones.append({
                                                                     'cortes': {
                                                                         pedido1['id']: n1,
@@ -844,6 +846,7 @@ class OptimizadorILP:
 
 def optimizar_ilp(df_desarrollos: pd.DataFrame,
                  df_pedidos: pd.DataFrame,
+                 desperdicio_bordes_minimo: int = 0,
                  desperdicio_bordes_maximo: int = 30,
                  kg_max_bobina: int = 4000,
                  kg_min_bobina: int = 200,
@@ -862,8 +865,11 @@ def optimizar_ilp(df_desarrollos: pd.DataFrame,
     - Incluye restricción de kg_disponibles por desarrollo
     - Incluye restricción de ML_MINIMOS por pedido con tolerancia
     - Incluye restricción de ML_MINIMO_RESTO: Si sobra material, debe ser suficiente
+    - Incluye restricción de desperdicio_bordes_minimo: Desperdicio mínimo de seguridad
     
     Parámetros:
+    - desperdicio_bordes_minimo: Desperdicio mínimo de seguridad en mm (default 10mm)
+    - desperdicio_bordes_maximo: Desperdicio máximo permitido en mm (default 30mm)
     - margen_tolerancia_ml_pct: Tolerancia % para ML_MINIMOS (default 10%)
                                 Si pedido requiere 300ml, acepta 270ml-330ml con 10%
     - ml_minimo_resto: ML mínimo que puede sobrar (default 300ml)
@@ -871,6 +877,7 @@ def optimizar_ilp(df_desarrollos: pd.DataFrame,
                        0 = desactivado
     """
     optimizador = OptimizadorILP(
+        desperdicio_bordes_minimo=desperdicio_bordes_minimo,
         desperdicio_bordes_maximo=desperdicio_bordes_maximo,
         kg_max_bobina=kg_max_bobina,
         kg_min_bobina=kg_min_bobina,

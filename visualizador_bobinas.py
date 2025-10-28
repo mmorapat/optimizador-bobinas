@@ -46,7 +46,7 @@ def visualizar_bobinas_detallado(df_solucion: pd.DataFrame):
         
         # TÍTULO
         ax.set_title(
-            f"{bobina_nombre} - ANCHO: {ancho_desarrollo}×{espesor}, {kg_brutos:.0f}KG {ml:.0f}ML, DESP: {desperdicio:.0f}mm",
+            f"{bobina_nombre} - ANCHO: {ancho_desarrollo:.1f}×{espesor:.2f}, {kg_brutos:.0f}KG {ml:.0f}ML, DESP: {desperdicio:.0f}mm",
             fontsize=11, fontweight='bold', pad=10
         )
         
@@ -88,7 +88,7 @@ def visualizar_bobinas_detallado(df_solucion: pd.DataFrame):
                 centro_x = posicion_x + ancho_corte/2
                 ax.text(centro_x, 40, f"{pedido}", 
                        ha='center', va='top', fontsize=9, fontweight='bold')
-                ax.text(centro_x, 25, f"{ancho_corte:.0f}mm", 
+                ax.text(centro_x, 25, f"{ancho_corte:.1f}mm", 
                        ha='center', va='top', fontsize=8, fontweight='bold', color='black')
                 ax.text(centro_x, 5, f"{kg_corte:.0f}kg", 
                        ha='center', va='top', fontsize=8, color='red', fontweight='bold')
@@ -122,7 +122,7 @@ def visualizar_bobinas_detallado(df_solucion: pd.DataFrame):
         
         # Agregar escala
         ax.text(0, -38, '0mm', ha='center', va='top', fontsize=8)
-        ax.text(ancho_desarrollo, -38, f'{ancho_desarrollo:.0f}mm', 
+        ax.text(ancho_desarrollo, -38, f'{ancho_desarrollo:.1f}mm', 
                ha='center', va='top', fontsize=8)
     
     plt.tight_layout()
@@ -215,7 +215,7 @@ def visualizar_bobinas(df_solucion: pd.DataFrame, max_bobinas: int = 10):
             
             ax.text(centro_x, 38, f"{pedido}", 
                    ha='center', va='top', fontsize=9, fontweight='bold')
-            ax.text(centro_x, 10, f"{int(num_cortes)}×{ancho_corte:.0f}mm", 
+            ax.text(centro_x, 10, f"{int(num_cortes)}×{ancho_corte:.1f}mm", 
                    ha='center', va='top', fontsize=8, fontweight='bold', color='black')
             ax.text(centro_x, -20, f"{kg_corte:.0f}kg", 
                    ha='center', va='top', fontsize=8, color='red', fontweight='bold')
