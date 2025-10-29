@@ -5,6 +5,11 @@ import importlib
 import sys
 
 # ====================================
+# IMPORTS NUEVOS PARA SUGERENCIA DE PARÁMETROS
+# ====================================
+from optimizador_parametros import sugerir_parametros_iniciales, OptimizadorParametros
+
+# ====================================
 # PROTECCIÓN CON CONTRASEÑA
 # ====================================
 def check_password():
@@ -87,20 +92,51 @@ with st.sidebar:
     st.markdown("---")
     
     # ========================================
-    # RESTRICCIONES
+    # RESTRICCIONES (vinculados a session_state)
     # ========================================
+    
+    # Inicializar valores por defecto si no existen
+    if 'desperdicio_bordes_minimo' not in st.session_state:
+        st.session_state.desperdicio_bordes_minimo = 0
+    if 'desperdicio_bordes_maximo' not in st.session_state:
+        st.session_state.desperdicio_bordes_maximo = 40
+    if 'margen_exceso_pedidos' not in st.session_state:
+        st.session_state.margen_exceso_pedidos = 100
+    if 'kg_max_bobina' not in st.session_state:
+        st.session_state.kg_max_bobina = 7500
+    if 'kg_min_bobina' not in st.session_state:
+        st.session_state.kg_min_bobina = 200
+    if 'max_cortes_por_pedido' not in st.session_state:
+        st.session_state.max_cortes_por_pedido = 15
+    if 'ml_minimo_resto' not in st.session_state:
+        st.session_state.ml_minimo_resto = 600
+    if 'margen_cobertura' not in st.session_state:
+        st.session_state.margen_cobertura = 95
+    if 'relajacion_ml_minimos_porcentaje' not in st.session_state:
+        st.session_state.relajacion_ml_minimos_porcentaje = 50
+    if 'factor_penalizacion_desperdicio' not in st.session_state:
+        st.session_state.factor_penalizacion_desperdicio = 0.01
+    
     with st.expander("🔧 Restricciones", expanded=True):
         desperdicio_bordes_minimo = st.number_input(
             "Desperdicio en bordes mínimo (mm)", 
-            0, 50, 0, 1,
+            0, 50, 
+            value=st.session_state.desperdicio_bordes_minimo,
+            step=1,
+            key='input_desp_min',
             help="Desperdicio mínimo de seguridad requerido en los bordes para las máquinas de corte (0 = sin restricción)"
         )
+        st.session_state.desperdicio_bordes_minimo = desperdicio_bordes_minimo
         
         desperdicio_bordes_maximo = st.number_input(
             "Desperdicio en bordes máximo (mm)", 
-            0, 100, 40, 5,
+            0, 100, 
+            value=st.session_state.desperdicio_bordes_maximo,
+            step=5,
+            key='input_desp_max',
             help="Desperdicio máximo de borde permitido en el ancho de la bobina (espacio que queda sin usar)"
         )
+        st.session_state.desperdicio_bordes_maximo = desperdicio_bordes_maximo
         
         # Validación de compatibilidad
         if desperdicio_bordes_minimo > desperdicio_bordes_maximo:
@@ -108,27 +144,43 @@ with st.sidebar:
         
         margen_exceso_pedidos = st.number_input(
             "Margen Exceso Pedidos (%)", 
-            0, 100, 100, 5,
+            0, 100, 
+            value=st.session_state.margen_exceso_pedidos,
+            step=5,
+            key='input_margen_exceso',
             help="Tolerancia máxima de exceso sobre el TOTAL del pedido"
         )
+        st.session_state.margen_exceso_pedidos = margen_exceso_pedidos
         
         kg_max_bobina = st.number_input(
             "KG máx bobina", 
-            1000, 10000, 7500, 500,
+            1000, 10000, 
+            value=st.session_state.kg_max_bobina,
+            step=500,
+            key='input_kg_max',
             help="Peso máximo permitido por bobina"
         )
+        st.session_state.kg_max_bobina = kg_max_bobina
         
         kg_min_bobina = st.number_input(
             "KG mín bobina", 
-            50, 2000, 200, 50,
+            50, 2000, 
+            value=st.session_state.kg_min_bobina,
+            step=50,
+            key='input_kg_min',
             help="Peso mínimo para considerar una bobina válida"
         )
+        st.session_state.kg_min_bobina = kg_min_bobina
         
         max_cortes_por_pedido = st.number_input(
             "Máx cortes por pedido", 
-            5, 30, 15, 1,
+            5, 30, 
+            value=st.session_state.max_cortes_por_pedido,
+            step=1,
+            key='input_max_cortes',
             help="Número máximo de cortes del mismo pedido en una bobina"
         )
+        st.session_state.max_cortes_por_pedido = max_cortes_por_pedido
     
     # ========================================
     # PARÁMETROS ILP
@@ -136,27 +188,44 @@ with st.sidebar:
     with st.expander("🔬 Parámetros ILP", expanded=True):
         margen_cobertura = st.slider(
             "% de exigencia para llegar exactamente a los kg del pedido",
-            80, 100, 95, 1,
+            80, 100, 
+            value=st.session_state.margen_cobertura,
+            step=1,
+            key='input_margen_cobertura',
             help="Porcentaje mínimo de kg que debe asignarse. 100% = debe llegar exacto, 95% = acepta 95% del pedido, 80% = acepta 80%"
-        ) / 100.0
+        )
+        st.session_state.margen_cobertura = margen_cobertura
+        margen_cobertura = margen_cobertura / 100.0  # Convertir a decimal para uso interno
         
         factor_penalizacion_desperdicio = st.slider(
             "⚖️ Penalización de desperdicio de bordes",
-            0.0, 0.1, 0.01, 0.005,
+            0.0, 0.1, 
+            value=st.session_state.factor_penalizacion_desperdicio,
+            step=0.005,
+            key='input_factor_penalizacion',
             help="Controla el balance entre minimizar bobinas y reducir desperdicio. 0 = solo minimiza bobinas, 0.01 = balance recomendado, 0.05+ = prioriza compactación"
         )
+        st.session_state.factor_penalizacion_desperdicio = factor_penalizacion_desperdicio
         
         relajacion_ml_minimos_porcentaje = st.number_input(
             "% relajación para cumplir los ml minimos por bobina", 
-            0, 100, 50, 5,
+            0, 100, 
+            value=st.session_state.relajacion_ml_minimos_porcentaje,
+            step=5,
+            key='input_relajacion_ml',
             help="Porcentaje de relajación del requisito ML. Con 10%, si pedido requiere 3000ml acepta desde 2700ml (solo hacia abajo)"
         )
+        st.session_state.relajacion_ml_minimos_porcentaje = relajacion_ml_minimos_porcentaje
         
         ml_minimo_resto = st.number_input(
             "No dejar bobinas con menos de estos metros lineales (usar todo si se puede)",
-            0, 1000, 600, 50,
+            0, 1000, 
+            value=st.session_state.ml_minimo_resto,
+            step=50,
+            key='input_ml_resto',
             help="Si una bobina dejaría menos ML de resto que este valor, el optimizador la usará completa. Ejemplo: con 600ml, si sobrarían 400ml, usa toda la bobina. 0 = desactivado"
         )
+        st.session_state.ml_minimo_resto = ml_minimo_resto
         
         tiempo_max_segundos = st.number_input(
             "Tiempo máximo (segundos)",
@@ -170,6 +239,191 @@ with st.sidebar:
         Para casos pequeños (<10 pedidos): ~1-30s
         Para casos medianos (10-20 pedidos): ~30-300s
         """)
+    
+    # ========================================
+    # 💡 NUEVA SECCIÓN: SUGERENCIA DE PARÁMETROS
+    # ========================================
+    st.markdown("---")
+    st.subheader("💡 Parámetros Sugeridos")
+    
+    # Verificar si hay datos
+    tiene_datos = not st.session_state.df_desarrollos.empty and not st.session_state.df_pedidos.empty
+    
+    # Botón siempre visible (deshabilitado si no hay datos)
+    if st.button(
+        "🔍 Calcular Parámetros Óptimos", 
+        help="Analiza tus datos y sugiere los mejores parámetros" if tiene_datos else "Carga datos primero",
+        use_container_width=True,
+        disabled=not tiene_datos
+    ):
+        with st.spinner("Analizando datos..."):
+            try:
+                # Sugerencia rápida
+                sugerencia = sugerir_parametros_iniciales(
+                    st.session_state.df_desarrollos,
+                    st.session_state.df_pedidos
+                )
+                
+                # Guardar en session_state
+                st.session_state.sugerencia_parametros = sugerencia
+                
+            except Exception as e:
+                st.error(f"Error al calcular sugerencias: {e}")
+    
+    # Mostrar mensaje si no hay datos
+    if not tiene_datos:
+        st.info("📥 Carga desarrollos y pedidos para usar esta función")
+    
+    # Mostrar sugerencias si hay datos Y se calcularon
+    if tiene_datos:
+        # Mostrar sugerencias si existen
+        if 'sugerencia_parametros' in st.session_state:
+            sugerencia = st.session_state.sugerencia_parametros
+            
+            st.success("✅ Análisis completado")
+            
+            with st.expander("📊 Parámetros Recomendados", expanded=True):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Desp Mín", f"{sugerencia['desperdicio_bordes_minimo']}mm")
+                    st.metric("Exceso", f"{sugerencia['margen_exceso']}%")
+                    st.metric("Penalización", f"{sugerencia.get('factor_penalizacion', 0.01)}")
+                
+                with col2:
+                    st.metric("Desp Máx", f"{sugerencia['desperdicio_bordes_maximo']}mm")
+                    st.metric("ML Resto", f"{sugerencia['ml_minimo_resto']}ml")
+                    st.metric("Cobertura", f"{sugerencia.get('margen_cobertura_pct', 95)}%")
+                
+                with col3:
+                    st.metric("Relajación ML", f"{sugerencia.get('relajacion_ml_pct', 50)}%")
+                
+                # Botón para aplicar
+                if st.button("✅ Aplicar Estos Parámetros", use_container_width=True, key='btn_aplicar_sugeridos'):
+                    # Actualizar TODOS los valores en session_state
+                    st.session_state.desperdicio_bordes_minimo = sugerencia['desperdicio_bordes_minimo']
+                    st.session_state.desperdicio_bordes_maximo = sugerencia['desperdicio_bordes_maximo']
+                    st.session_state.margen_exceso_pedidos = sugerencia['margen_exceso']
+                    st.session_state.ml_minimo_resto = sugerencia['ml_minimo_resto']
+                    st.session_state.margen_cobertura = sugerencia.get('margen_cobertura_pct', 95)
+                    st.session_state.relajacion_ml_minimos_porcentaje = sugerencia.get('relajacion_ml_pct', 50)
+                    st.session_state.factor_penalizacion_desperdicio = sugerencia.get('factor_penalizacion', 0.01)
+                    
+                    st.success("✅ ¡Parámetros aplicados! Los valores se actualizarán arriba.")
+                    time.sleep(0.5)
+                    st.rerun()
+                
+                # Mostrar justificación
+                st.info("**📝 Justificación:**")
+                for key, valor in sugerencia['justificacion'].items():
+                    st.write(f"• {valor}")
+            
+            # Opción avanzada: búsqueda completa
+            with st.expander("🔬 Búsqueda Avanzada (más lenta)", expanded=False):
+                st.warning("⚠️ Esto ejecutará múltiples optimizaciones (puede tardar 1-5 minutos)")
+                
+                modo = st.selectbox(
+                    "Intensidad de búsqueda:",
+                    options=['rapido', 'completo'],
+                    format_func=lambda x: {
+                        'rapido': '⚡ Rápido (~16 pruebas, 1-2 min)',
+                        'completo': '⚖️ Completo (~192 pruebas, 3-5 min)'
+                    }[x]
+                )
+                
+                if st.button(f"🚀 Ejecutar Búsqueda {modo.capitalize()}", use_container_width=True):
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    def callback_progreso(progreso, mensaje):
+                        progress_bar.progress(progreso)
+                        status_text.info(mensaje)
+                    
+                    try:
+                        optimizador = OptimizadorParametros(
+                            st.session_state.df_desarrollos,
+                            st.session_state.df_pedidos
+                        )
+                        
+                        with st.spinner("Ejecutando búsqueda..."):
+                            resultado = optimizador.buscar_parametros_optimos(
+                                modo=modo,
+                                callback=callback_progreso
+                            )
+                        
+                        progress_bar.empty()
+                        status_text.empty()
+                        
+                        if resultado and resultado['mejor']:
+                            mejor = resultado['mejor']
+                            
+                            st.success("🏆 ¡Configuración óptima encontrada!")
+                            
+                            # Mostrar mejor resultado
+                            col1, col2, col3 = st.columns(3)
+                            col1.metric("Bobinas", mejor['num_bobinas'])
+                            col2.metric("Desperdicio", f"{mejor['desperdicio_total']:.1f}mm")
+                            col3.metric("Cobertura", f"{mejor['cobertura_min']:.1f}%")
+                            
+                            # Parámetros óptimos
+                            st.write("**📋 Parámetros Óptimos:**")
+                            
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                st.write(f"**Desperdicio:** {mejor['desperdicio_min']}-{mejor['desperdicio_max']}mm")
+                                st.write(f"**Exceso:** {mejor['margen_exceso_pct']}%")
+                            
+                            with col2:
+                                st.write(f"**ML resto:** {mejor['ml_minimo_resto']}ml")
+                                st.write(f"**Cobertura:** {mejor.get('margen_cobertura_pct', 90)}%")
+                            
+                            with col3:
+                                st.write(f"**Relajación ML:** {mejor.get('relajacion_ml_pct', 50)}%")
+                                st.write(f"**Penalización:** {mejor.get('factor_penalizacion', 0.01)}")
+                            
+                            # Botón para aplicar parámetros óptimos
+                            if st.button("✅ Aplicar Parámetros Óptimos", use_container_width=True, key='btn_aplicar_optimos'):
+                                # Actualizar TODOS los valores en session_state
+                                st.session_state.desperdicio_bordes_minimo = mejor['desperdicio_min']
+                                st.session_state.desperdicio_bordes_maximo = mejor['desperdicio_max']
+                                st.session_state.margen_exceso_pedidos = mejor['margen_exceso_pct']
+                                st.session_state.ml_minimo_resto = mejor['ml_minimo_resto']
+                                st.session_state.margen_cobertura = mejor.get('margen_cobertura_pct', 95)
+                                st.session_state.relajacion_ml_minimos_porcentaje = mejor.get('relajacion_ml_pct', 50)
+                                st.session_state.factor_penalizacion_desperdicio = mejor.get('factor_penalizacion', 0.01)
+                                
+                                st.success("✅ ¡Parámetros óptimos aplicados!")
+                                time.sleep(0.5)
+                                st.rerun()
+                            
+                            # Mostrar top 5
+                            if resultado['top5'] and len(resultado['top5']) > 1:
+                                st.write("**📊 Top 5 Configuraciones:**")
+                                
+                                data_top5 = []
+                                for idx, r in enumerate(resultado['top5'], 1):
+                                    data_top5.append({
+                                        '#': idx,
+                                        'Bobinas': r['num_bobinas'],
+                                        'Desp': f"{r['desperdicio_total']:.0f}mm",
+                                        'Desp Min': f"{r['desperdicio_min']}",
+                                        'Desp Max': f"{r['desperdicio_max']}",
+                                        'Exceso': f"{r['margen_exceso_pct']}%",
+                                        'ML Resto': f"{r['ml_minimo_resto']}",
+                                        'Cobertura': f"{r.get('margen_cobertura_pct', 90)}%",
+                                        'Relaj ML': f"{r.get('relajacion_ml_pct', 50)}%"
+                                    })
+                                
+                                df_top5 = pd.DataFrame(data_top5)
+                                st.dataframe(df_top5, use_container_width=True, hide_index=True)
+                        else:
+                            st.error("❌ No se encontró ninguna configuración válida")
+                    
+                    except Exception as e:
+                        progress_bar.empty()
+                        status_text.empty()
+                        st.error(f"Error durante la búsqueda: {e}")
 
 # ========================================
 # MAIN CONTENT
