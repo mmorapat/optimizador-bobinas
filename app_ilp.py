@@ -148,7 +148,7 @@ with st.sidebar:
         
         relajacion_ml_minimos_porcentaje = st.number_input(
             "% relajación para cumplir los ml minimos por bobina", 
-            0, 100, 100, 5,
+            0, 100, 50, 5,
             help="Porcentaje de relajación del requisito ML. Con 10%, si pedido requiere 3000ml acepta desde 2700ml (solo hacia abajo)"
         )
         
