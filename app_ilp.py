@@ -108,13 +108,13 @@ with st.sidebar:
         
         margen_exceso_pedidos = st.number_input(
             "Margen Exceso Pedidos (%)", 
-            0, 100, 50, 5,
+            0, 100, 100, 5,
             help="Tolerancia máxima de exceso sobre el TOTAL del pedido"
         )
         
         kg_max_bobina = st.number_input(
             "KG máx bobina", 
-            1000, 10000, 4000, 500,
+            1000, 10000, 7500, 500,
             help="Peso máximo permitido por bobina"
         )
         
