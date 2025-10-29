@@ -108,7 +108,7 @@ with st.sidebar:
         
         margen_exceso_pedidos = st.number_input(
             "Margen Exceso Pedidos (%)", 
-            0, 50, 15, 5,
+            0, 100, 50, 5,
             help="Tolerancia máxima de exceso sobre el TOTAL del pedido"
         )
         
@@ -148,7 +148,7 @@ with st.sidebar:
         
         relajacion_ml_minimos_porcentaje = st.number_input(
             "% relajación para cumplir los ml minimos por bobina", 
-            0, 50, 50, 5,
+            0, 100, 100, 5,
             help="Porcentaje de relajación del requisito ML. Con 10%, si pedido requiere 3000ml acepta desde 2700ml (solo hacia abajo)"
         )
         
@@ -492,7 +492,7 @@ with tab_optimizar:
                         ml_minimo_resto=ml_minimo_resto,
                         tiempo_max_segundos=tiempo_max_segundos,
                         factor_penalizacion_desperdicio=factor_penalizacion_desperdicio,
-                        debug=False
+                        debug=True
                     )
                     
                     tiempo_total = time.time() - tiempo_inicio
