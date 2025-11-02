@@ -5,11 +5,16 @@ import importlib
 import sys
 
 # ====================================
-# PROTECCIÓN CON CONTRASEÑA
-# ===================================
-control_acceso=True
+# IMPORTS NUEVOS PARA SUGERENCIA DE PARÁMETROS
+# ====================================
 
-if control_acceso==True:
+from optimizador_parametros import sugerir_parametros_iniciales, OptimizadorParametros
+desactivar=True
+
+if not desactivar:
+    # ====================================
+    # PROTECCIÓN CON CONTRASEÑA
+    # ====================================
     def check_password():
         """Verifica la contraseña antes de mostrar la app"""
         
@@ -83,6 +88,12 @@ if 'df_desarrollos' not in st.session_state:
 if 'df_pedidos' not in st.session_state:
     st.session_state.df_pedidos = estructura_pedidos.copy()
 
+# ====================================
+# 🔧 NUEVA: Variable de versión para forzar recreación de widgets
+# ====================================
+if 'param_version' not in st.session_state:
+    st.session_state.param_version = 0
+
 # Sidebar con parámetros
 with st.sidebar:
     st.header("⚙️ Parámetros de Optimización")
@@ -90,22 +101,52 @@ with st.sidebar:
     st.markdown("---")
     
     # ========================================
-    # RESTRICCIONES
+    # RESTRICCIONES (vinculados a session_state)
     # ========================================
+    
+    # Inicializar valores por defecto si no existen
+    if 'desperdicio_bordes_minimo' not in st.session_state:
+        st.session_state.desperdicio_bordes_minimo = 0
+    if 'desperdicio_bordes_maximo' not in st.session_state:
+        st.session_state.desperdicio_bordes_maximo = 40
+    if 'margen_exceso_pedidos' not in st.session_state:
+        st.session_state.margen_exceso_pedidos = 100
+    if 'kg_max_bobina' not in st.session_state:
+        st.session_state.kg_max_bobina = 7500
+    if 'kg_min_bobina' not in st.session_state:
+        st.session_state.kg_min_bobina = 200
+    if 'max_cortes_por_pedido' not in st.session_state:
+        st.session_state.max_cortes_por_pedido = 15
+    if 'ml_minimo_resto' not in st.session_state:
+        st.session_state.ml_minimo_resto = 600
+    if 'margen_cobertura' not in st.session_state:
+        st.session_state.margen_cobertura = 95
+    if 'relajacion_ml_minimos_porcentaje' not in st.session_state:
+        st.session_state.relajacion_ml_minimos_porcentaje = 50
+    if 'factor_penalizacion_desperdicio' not in st.session_state:
+        st.session_state.factor_penalizacion_desperdicio = 0.01
+    
     with st.expander("🔧 Restricciones", expanded=True):
+        # 🔧 CORRECCIÓN: Key incluye versión
         desperdicio_bordes_minimo = st.number_input(
             "Desperdicio en bordes mínimo (mm)", 
-            0, 50, 8,
+            0, 50, 
+            value=st.session_state.desperdicio_bordes_minimo,
             step=1,
+            key=f'input_desp_min_v{st.session_state.param_version}',  # ← Incluye versión
             help="Desperdicio mínimo de seguridad requerido en los bordes para las máquinas de corte (0 = sin restricción)"
         )
+        st.session_state.desperdicio_bordes_minimo = desperdicio_bordes_minimo
         
         desperdicio_bordes_maximo = st.number_input(
             "Desperdicio en bordes máximo (mm)", 
-            0, 100, 40,
+            0, 100, 
+            value=st.session_state.desperdicio_bordes_maximo,
             step=5,
+            key=f'input_desp_max_v{st.session_state.param_version}',  # ← Incluye versión
             help="Desperdicio máximo de borde permitido en el ancho de la bobina (espacio que queda sin usar)"
         )
+        st.session_state.desperdicio_bordes_maximo = desperdicio_bordes_maximo
         
         # Validación de compatibilidad
         if desperdicio_bordes_minimo > desperdicio_bordes_maximo:
@@ -113,31 +154,43 @@ with st.sidebar:
         
         margen_exceso_pedidos = st.number_input(
             "Margen Exceso Pedidos (%)", 
-            0, 100, 15,
+            0, 100, 
+            value=st.session_state.margen_exceso_pedidos,
             step=5,
+            key=f'input_margen_exceso_v{st.session_state.param_version}',  # ← Incluye versión
             help="Tolerancia máxima de exceso sobre el TOTAL del pedido"
         )
+        st.session_state.margen_exceso_pedidos = margen_exceso_pedidos
         
         kg_max_bobina = st.number_input(
             "KG máx bobina", 
-            1000, 10000, 7500,
+            1000, 10000, 
+            value=st.session_state.kg_max_bobina,
             step=500,
+            key=f'input_kg_max_v{st.session_state.param_version}',  # ← Incluye versión
             help="Peso máximo permitido por bobina"
         )
+        st.session_state.kg_max_bobina = kg_max_bobina
         
         kg_min_bobina = st.number_input(
             "KG mín bobina", 
-            50, 2000, 200,
+            50, 2000, 
+            value=st.session_state.kg_min_bobina,
             step=50,
+            key=f'input_kg_min_v{st.session_state.param_version}',  # ← Incluye versión
             help="Peso mínimo para considerar una bobina válida"
         )
+        st.session_state.kg_min_bobina = kg_min_bobina
         
         max_cortes_por_pedido = st.number_input(
             "Máx cortes por pedido", 
-            5, 30, 15,
+            5, 30, 
+            value=st.session_state.max_cortes_por_pedido,
             step=1,
+            key=f'input_max_cortes_v{st.session_state.param_version}',  # ← Incluye versión
             help="Número máximo de cortes del mismo pedido en una bobina"
         )
+        st.session_state.max_cortes_por_pedido = max_cortes_por_pedido
     
     # ========================================
     # PARÁMETROS ILP
@@ -145,36 +198,48 @@ with st.sidebar:
     with st.expander("🔬 Parámetros ILP", expanded=True):
         margen_cobertura = st.slider(
             "% de exigencia para llegar exactamente a los kg del pedido",
-            80, 100, 95,
+            80, 100, 
+            value=st.session_state.margen_cobertura,
             step=1,
+            key=f'input_margen_cobertura_v{st.session_state.param_version}',  # ← Incluye versión
             help="Porcentaje mínimo de kg que debe asignarse. 100% = debe llegar exacto, 95% = acepta 95% del pedido, 80% = acepta 80%"
         )
+        st.session_state.margen_cobertura = margen_cobertura
         margen_cobertura = margen_cobertura / 100.0  # Convertir a decimal para uso interno
         
         factor_penalizacion_desperdicio = st.slider(
             "⚖️ Penalización de desperdicio de bordes",
-            0.0, 0.1, 0.01,
+            0.0, 0.1, 
+            value=st.session_state.factor_penalizacion_desperdicio,
             step=0.005,
+            key=f'input_factor_penalizacion_v{st.session_state.param_version}',  # ← Incluye versión
             help="Controla el balance entre minimizar bobinas y reducir desperdicio. 0 = solo minimiza bobinas, 0.01 = balance recomendado, 0.05+ = prioriza compactación"
         )
+        st.session_state.factor_penalizacion_desperdicio = factor_penalizacion_desperdicio
         
         relajacion_ml_minimos_porcentaje = st.number_input(
             "% relajación para cumplir los ml minimos por bobina", 
-            0, 100, 50,
+            0, 100, 
+            value=st.session_state.relajacion_ml_minimos_porcentaje,
             step=5,
+            key=f'input_relajacion_ml_v{st.session_state.param_version}',  # ← Incluye versión
             help="Porcentaje de relajación del requisito ML. Con 10%, si pedido requiere 3000ml acepta desde 2700ml (solo hacia abajo)"
         )
+        st.session_state.relajacion_ml_minimos_porcentaje = relajacion_ml_minimos_porcentaje
         
         ml_minimo_resto = st.number_input(
             "No dejar bobinas con menos de estos metros lineales (usar todo si se puede)",
-            0, 1000, 0,
+            0, 1000, 
+            value=st.session_state.ml_minimo_resto,
             step=50,
+            key=f'input_ml_resto_v{st.session_state.param_version}',  # ← Incluye versión
             help="Si una bobina dejaría menos ML de resto que este valor, el optimizador la usará completa. Ejemplo: con 600ml, si sobrarían 400ml, usa toda la bobina. 0 = desactivado"
         )
+        st.session_state.ml_minimo_resto = ml_minimo_resto
         
         tiempo_max_segundos = st.number_input(
             "Tiempo máximo (segundos)",
-            5, 600, 10, 5,
+            30, 600, 300, 30,
             help="Tiempo máximo de resolución. Si no encuentra solución, se detiene."
         )
         
@@ -184,21 +249,213 @@ with st.sidebar:
         Para casos pequeños (<10 pedidos): ~1-30s
         Para casos medianos (10-20 pedidos): ~30-300s
         """)
+    
+    # ========================================
+    # 💡 NUEVA SECCIÓN: SUGERENCIA DE PARÁMETROS
+    # ========================================
+    st.markdown("---")
+    st.subheader("💡 Parámetros Sugeridos")
+    
+    # Verificar si hay datos
+    tiene_datos = not st.session_state.df_desarrollos.empty and not st.session_state.df_pedidos.empty
+    
+    # Botón siempre visible (deshabilitado si no hay datos)
+    if st.button(
+        "🔍 Calcular Parámetros Óptimos", 
+        help="Analiza tus datos y sugiere los mejores parámetros" if tiene_datos else "Carga datos primero",
+        use_container_width=True,
+        disabled=not tiene_datos
+    ):
+        with st.spinner("Analizando datos..."):
+            try:
+                # Sugerencia rápida
+                sugerencia = sugerir_parametros_iniciales(
+                    st.session_state.df_desarrollos,
+                    st.session_state.df_pedidos
+                )
+                
+                # Guardar en session_state
+                st.session_state.sugerencia_parametros = sugerencia
+                
+            except Exception as e:
+                st.error(f"Error al calcular sugerencias: {e}")
+    
+    # Mostrar mensaje si no hay datos
+    if not tiene_datos:
+        st.info("📥 Carga desarrollos y pedidos para usar esta función")
+    
+    # Mostrar sugerencias si hay datos Y se calcularon
+    if tiene_datos:
+        # Mostrar sugerencias si existen
+        if 'sugerencia_parametros' in st.session_state:
+            sugerencia = st.session_state.sugerencia_parametros
+            
+            st.success("✅ Análisis completado")
+            
+            with st.expander("📊 Parámetros Recomendados", expanded=True):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Desp Mín", f"{sugerencia['desperdicio_bordes_minimo']}mm")
+                    st.metric("Exceso", f"{sugerencia['margen_exceso']}%")
+                    st.metric("Penalización", f"{sugerencia.get('factor_penalizacion', 0.01)}")
+                
+                with col2:
+                    st.metric("Desp Máx", f"{sugerencia['desperdicio_bordes_maximo']}mm")
+                    st.metric("ML Resto", f"{sugerencia['ml_minimo_resto']}ml")
+                    st.metric("Cobertura", f"{sugerencia.get('margen_cobertura_pct', 95)}%")
+                
+                with col3:
+                    st.metric("Relajación ML", f"{sugerencia.get('relajacion_ml_pct', 50)}%")
+                
+                # Botón para aplicar
+                if st.button("✅ Aplicar Estos Parámetros", use_container_width=True, key='btn_aplicar_sugeridos'):
+                    # 🔧 CORRECCIÓN: Actualizar valores Y incrementar versión
+                    st.session_state.desperdicio_bordes_minimo = sugerencia['desperdicio_bordes_minimo']
+                    st.session_state.desperdicio_bordes_maximo = sugerencia['desperdicio_bordes_maximo']
+                    st.session_state.margen_exceso_pedidos = sugerencia['margen_exceso']
+                    st.session_state.ml_minimo_resto = sugerencia['ml_minimo_resto']
+                    st.session_state.margen_cobertura = sugerencia.get('margen_cobertura_pct', 95)
+                    st.session_state.relajacion_ml_minimos_porcentaje = sugerencia.get('relajacion_ml_pct', 50)
+                    st.session_state.factor_penalizacion_desperdicio = sugerencia.get('factor_penalizacion', 0.01)
+                    
+                    # 🔥 CLAVE: Incrementar versión para forzar recreación de widgets
+                    st.session_state.param_version += 1
+                    
+                    st.success("✅ ¡Parámetros aplicados!")
+                    time.sleep(0.3)
+                    st.rerun()
+                
+                # Mostrar justificación
+                st.info("**📝 Justificación:**")
+                for key, valor in sugerencia['justificacion'].items():
+                    st.write(f"• {valor}")
+            
+            # Opción avanzada: búsqueda completa
+            with st.expander("🔬 Búsqueda Avanzada (más lenta)", expanded=False):
+                st.warning("⚠️ Esto ejecutará múltiples optimizaciones (puede tardar 1-5 minutos)")
+                
+                modo = st.selectbox(
+                    "Intensidad de búsqueda:",
+                    options=['rapido', 'completo'],
+                    format_func=lambda x: {
+                        'rapido': '⚡ Rápido (~16 pruebas, 1-2 min)',
+                        'completo': '⚖️ Completo (~192 pruebas, 3-5 min)'
+                    }[x]
+                )
+                
+                if st.button(f"🚀 Ejecutar Búsqueda {modo.capitalize()}", use_container_width=True):
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    def callback_progreso(progreso, mensaje):
+                        progress_bar.progress(progreso)
+                        status_text.info(mensaje)
+                    
+                    try:
+                        optimizador = OptimizadorParametros(
+                            st.session_state.df_desarrollos,
+                            st.session_state.df_pedidos
+                        )
+                        
+                        with st.spinner("Ejecutando búsqueda..."):
+                            resultado = optimizador.buscar_parametros_optimos(
+                                modo=modo,
+                                callback=callback_progreso
+                            )
+                        
+                        progress_bar.empty()
+                        status_text.empty()
+                        
+                        if resultado and resultado['mejor']:
+                            mejor = resultado['mejor']
+                            
+                            st.success("🏆 ¡Configuración óptima encontrada!")
+                            
+                            # Mostrar mejor resultado
+                            col1, col2, col3 = st.columns(3)
+                            col1.metric("Bobinas", mejor['num_bobinas'])
+                            col2.metric("Desperdicio", f"{mejor['desperdicio_total']:.1f}mm")
+                            col3.metric("Cobertura", f"{mejor['cobertura_min']:.1f}%")
+                            
+                            # Parámetros óptimos
+                            st.write("**📋 Parámetros Óptimos:**")
+                            
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                st.write(f"**Desperdicio:** {mejor['desperdicio_min']}-{mejor['desperdicio_max']}mm")
+                                st.write(f"**Exceso:** {mejor['margen_exceso_pct']}%")
+                            
+                            with col2:
+                                st.write(f"**ML resto:** {mejor['ml_minimo_resto']}ml")
+                                st.write(f"**Cobertura:** {mejor.get('margen_cobertura_pct', 90)}%")
+                            
+                            with col3:
+                                st.write(f"**Relajación ML:** {mejor.get('relajacion_ml_pct', 50)}%")
+                                st.write(f"**Penalización:** {mejor.get('factor_penalizacion', 0.01)}")
+                            
+                            # Botón para aplicar parámetros óptimos
+                            if st.button("✅ Aplicar Parámetros Óptimos", use_container_width=True, key='btn_aplicar_optimos'):
+                                # 🔧 CORRECCIÓN: Actualizar valores Y incrementar versión
+                                st.session_state.desperdicio_bordes_minimo = mejor['desperdicio_min']
+                                st.session_state.desperdicio_bordes_maximo = mejor['desperdicio_max']
+                                st.session_state.margen_exceso_pedidos = mejor['margen_exceso_pct']
+                                st.session_state.ml_minimo_resto = mejor['ml_minimo_resto']
+                                st.session_state.margen_cobertura = mejor.get('margen_cobertura_pct', 95)
+                                st.session_state.relajacion_ml_minimos_porcentaje = mejor.get('relajacion_ml_pct', 50)
+                                st.session_state.factor_penalizacion_desperdicio = mejor.get('factor_penalizacion', 0.01)
+                                
+                                # 🔥 CLAVE: Incrementar versión para forzar recreación de widgets
+                                st.session_state.param_version += 1
+                                
+                                st.success("✅ ¡Parámetros óptimos aplicados!")
+                                time.sleep(0.3)
+                                st.rerun()
+                            
+                            # Mostrar top 5
+                            if resultado['top5'] and len(resultado['top5']) > 1:
+                                st.write("**📊 Top 5 Configuraciones:**")
+                                
+                                data_top5 = []
+                                for idx, r in enumerate(resultado['top5'], 1):
+                                    data_top5.append({
+                                        '#': idx,
+                                        'Bobinas': r['num_bobinas'],
+                                        'Desp': f"{r['desperdicio_total']:.0f}mm",
+                                        'Desp Min': f"{r['desperdicio_min']}",
+                                        'Desp Max': f"{r['desperdicio_max']}",
+                                        'Exceso': f"{r['margen_exceso_pct']}%",
+                                        'ML Resto': f"{r['ml_minimo_resto']}",
+                                        'Cobertura': f"{r.get('margen_cobertura_pct', 90)}%",
+                                        'Relaj ML': f"{r.get('relajacion_ml_pct', 50)}%"
+                                    })
+                                
+                                df_top5 = pd.DataFrame(data_top5)
+                                st.dataframe(df_top5, use_container_width=True, hide_index=True)
+                        else:
+                            st.error("❌ No se encontró ninguna configuración válida")
+                    
+                    except Exception as e:
+                        progress_bar.empty()
+                        status_text.empty()
+                        st.error(f"Error durante la búsqueda: {e}")
 
 # ========================================
 # MAIN CONTENT
 # ========================================
 
-# Tabs principales - UNIFICADAS
-tab_entrada, tab_optimizar, tab_visualizacion, tab_detalles = st.tabs([
+# Tabs principales
+tab_entrada, tab_optimizar, tab_visualizacion, tab_bobinas, tab_detalle = st.tabs([
     "📥 Datos de Entrada",
     "⚡ Optimizar",
     "📈 Visualización",
-    "📋 Detalles de Desarrollos"
+    "🎲 Bobinas",
+    "📋 Detalle"
 ])
 
 # ========================================
-# TAB: DATOS DE ENTRADA (SIN LABEL)
+# TAB: DATOS DE ENTRADA (SIN CAMBIOS - NO TOCAR)
 # ========================================
 with tab_entrada:
     col_dev, col_ped = st.columns(2)
@@ -206,10 +463,10 @@ with tab_entrada:
     with col_dev:
         st.caption("🧵 **Desarrollos**")
         
-        with st.expander("📤 Carga de ficheros", expanded=False):
-            st.caption("Límite 200MB por fichero • CSV, XLSX, XLS")
+        with st.expander("📤 Drag and drop file here", expanded=False):
+            st.caption("Límit 200MB per file • CSV, XLSX, XLS")
             uploaded_dev = st.file_uploader(
-                "ver  ficheros",
+                "Browse files",
                 type=['csv', 'xlsx', 'xls'],
                 key='upload_desarrollos',
                 label_visibility='collapsed'
@@ -295,10 +552,10 @@ with tab_entrada:
     with col_ped:
         st.caption("📦 **Pedidos**")
         
-        with st.expander("📤 Carga de ficheros", expanded=False):
-            st.caption("Límite 200MB por fichero • CSV, XLSX, XLS")
+        with st.expander("📤 Drag and drop file here", expanded=False):
+            st.caption("Límit 200MB per file • CSV, XLSX, XLS")
             uploaded_ped = st.file_uploader(
-                "Ver Ficheros",
+                "Browse files",
                 type=['csv', 'xlsx', 'xls'],
                 key='upload_pedidos',
                 label_visibility='collapsed'
@@ -511,26 +768,15 @@ with tab_optimizar:
                     tiempo_total = time.time() - tiempo_inicio
                     
                     if resultado and len(resultado) > 0:
-                        # GUARDAR TANTO EL DATAFRAME COMO EL DATAFRAME_DESARROLLOS
                         st.session_state.solucion = resultado[0]['dataframe']
-                        st.session_state.solucion_desarrollos = resultado[0].get('dataframe_desarrollos', pd.DataFrame())
-                        st.session_state.num_configuraciones = resultado[0].get('num_configuraciones', 0)
-                        
                         st.success(f"✅ Optimización completada en {tiempo_total:.2f}s")
                         
-                        # MOSTRAR 4 MÉTRICAS: Configs, Bobinas, Desperdicio, KG Totales
-                        col1, col2, col3, col4 = st.columns(4)
-                        col1.metric("Configuraciones Distintas", resultado[0].get('num_configuraciones', '-'))
-                        col2.metric("Bobinas Generadas", resultado[0]['num_bobinas'])
-                        col3.metric("Desperdicio Total", f"{resultado[0]['desperdicio_total']:.0f}mm")
-                        col4.metric("KG Totales", f"{resultado[0]['kg_totales']:.0f}kg")
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Bobinas Generadas", resultado[0]['num_bobinas'])
+                        col2.metric("Desperdicio Total", f"{resultado[0]['desperdicio_total']:.0f}mm")
+                        col3.metric("KG Totales", f"{resultado[0]['kg_totales']:.0f}kg")
                         
-                        # Mostrar desarrollos distintos
-                        if not st.session_state.solucion_desarrollos.empty:
-                            num_desarrollos = len(st.session_state.solucion_desarrollos)
-                            st.info(f"🏭 Se utilizaron **{num_desarrollos}** desarrollos distintos")
-                        
-                        st.info("👉 Ve a las pestañas 'Visualización', 'Bobinas', 'Desarrollos' o 'Detalle' para ver los resultados")
+                        st.info("👉 Ve a las pestañas 'Visualización', 'Bobinas' o 'Detalle' para ver los resultados")
                     else:
                         st.error("❌ No se encontró solución óptima")
                         
@@ -652,74 +898,13 @@ with tab_visualizacion:
                 )
 
 # ========================================
-# TAB: DETALLES DE DESARROLLOS - UNIFICADO
+# TAB: BOBINAS
 # ========================================
-with tab_detalles:
+with tab_bobinas:
     if 'solucion' not in st.session_state:
         st.info("⚠️ Ejecuta la optimización primero para ver resultados")
     else:
-        # ========================================
-        # SECCIÓN 1: DESARROLLOS Y CONFIGURACIONES
-        # ========================================
-        st.header("🏭 Desarrollos y Configuraciones Utilizadas")
-        
-        if 'solucion_desarrollos' in st.session_state and not st.session_state.solucion_desarrollos.empty:
-            df_desarrollos_resultado = st.session_state.solucion_desarrollos
-            
-            # Mostrar tabla resumen
-            st.dataframe(
-                df_desarrollos_resultado,
-                use_container_width=True,
-                height=300,
-                column_config={
-                    "DESARROLLO_CONFIG": st.column_config.TextColumn(
-                        "Desarrollo + Configuración",
-                        width="large"
-                    ),
-                    "ML_TOTALES": "ML Totales",
-                    "KG_TOTALES": "KG Totales",
-                    "NUM_BOBINAS": "Nº Bobinas"
-                }
-            )
-            
-            # Expandibles con detalle por desarrollo+config
-            for _, row in df_desarrollos_resultado.iterrows():
-                num_bobinas_text = f"{row['NUM_BOBINAS']} {'bobina' if row['NUM_BOBINAS'] == 1 else 'bobinas'}"
-                
-                with st.expander(f"🔍 {row['DESARROLLO_CONFIG']} | {row['ML_TOTALES']:.0f}ml | {row['KG_TOTALES']:.0f}kg | {num_bobinas_text}"):
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Metros Lineales Totales", f"{row['ML_TOTALES']:.0f}ml")
-                    col2.metric("KG Totales", f"{row['KG_TOTALES']:.0f}kg")
-                    col3.metric("Número de Bobinas", row['NUM_BOBINAS'])
-                    
-                    if row['NUM_BOBINAS'] > 1:
-                        st.info(f"ℹ️ Esta configuración se repite {row['NUM_BOBINAS']} veces (ML y KG están sumados)")
-                    
-                    st.write("**Pedidos cortados:**")
-                    st.write(row['PEDIDOS'])
-                    
-                    st.write("**Distribución de KG por pedido:**")
-                    for item in row['KG_POR_PEDIDO'].split(" | "):
-                        st.write(f"  • {item}")
-            
-            # Botón descarga desarrollos
-            csv_desarrollos = df_desarrollos_resultado.to_csv(index=False)
-            st.download_button(
-                "📥 Descargar CSV Desarrollos",
-                csv_desarrollos,
-                "desarrollos_configuraciones.csv",
-                "text/csv",
-                use_container_width=True
-            )
-        else:
-            st.warning("No hay información de desarrollos disponible")
-        
-        st.markdown("---")
-        
-        # ========================================
-        # SECCIÓN 2: DETALLE POR BOBINA
-        # ========================================
-        st.header("🎲 Detalle por Bobina Individual")
+        st.header("🎲 Detalle por Bobina")
         
         bobinas = sorted(st.session_state.solucion['BOBINA'].unique())
         
@@ -729,6 +914,7 @@ with tab_detalles:
             # Calcular totales
             ml_total = bobina_data['METROS_LINEALES'].iloc[0]
             desarrollo = bobina_data['DESARROLLO'].iloc[0]
+            # ✅ CORRECCIÓN: Usar KG_TOTALES_BOBINA (incluye desperdicio)
             kg_total = bobina_data['KG_TOTALES_BOBINA'].iloc[0] if 'KG_TOTALES_BOBINA' in bobina_data.columns else bobina_data['KG_ASIGNADOS'].sum()
             desperdicio = bobina_data['DESPERDICIO'].iloc[0]
             
@@ -753,7 +939,7 @@ with tab_detalles:
             else:
                 desarrollo_completo = desarrollo
             
-            # Construir resumen de cortes
+            # Construir resumen de cortes: 2×120 + 5×132.5 + 2×153
             cortes_resumen = []
             for _, row in bobina_data.iterrows():
                 cortes_resumen.append(f"{row['NUM_CORTES']}×{row['ANCHO_CORTE']:.1f}")
@@ -773,26 +959,28 @@ with tab_detalles:
                     bobina_data[['PEDIDO', 'NUM_CORTES', 'ANCHO_CORTE', 'KG_ASIGNADOS']],
                     use_container_width=True
                 )
-        
-        st.markdown("---")
-        
-        # ========================================
-        # SECCIÓN 3: TABLA DETALLADA COMPLETA
-        # ========================================
-        st.header("📋 Tabla Detallada Completa")
+
+# ========================================
+# TAB: DETALLE
+# ========================================
+with tab_detalle:
+    if 'solucion' not in st.session_state:
+        st.info("⚠️ Ejecuta la optimización primero para ver resultados")
+    else:
+        st.header("📋 Tabla Detallada")
         
         st.dataframe(
             st.session_state.solucion,
             use_container_width=True,
-            height=400
+            height=600
         )
         
-        # Botón de descarga tabla completa
-        csv_completo = st.session_state.solucion.to_csv(index=False)
+        # Botón de descarga
+        csv = st.session_state.solucion.to_csv(index=False)
         st.download_button(
-            "📥 Descargar CSV Completo",
-            csv_completo,
-            "solucion_optimizada_completa.csv",
+            "📥 Descargar CSV",
+            csv,
+            "solucion_optimizada.csv",
             "text/csv",
             use_container_width=True
         )
