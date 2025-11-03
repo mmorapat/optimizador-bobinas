@@ -9,7 +9,7 @@ import sys
 # ====================================
 
 from optimizador_parametros import sugerir_parametros_iniciales, OptimizadorParametros
-desactivar=True
+desactivar=False
 
 if not desactivar:
     # ====================================

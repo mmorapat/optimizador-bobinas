@@ -1,6 +1,6 @@
 """
-🔬 OPTIMIZADOR ILP V3 - MEJORADO
-Genera MÁS configuraciones y usa objetivo correcto
+🔬 OPTIMIZADOR ILP V3 - MEJORADO CON 4 PEDIDOS
+Genera MÁS configuraciones - LÍMITE: 4 PEDIDOS DISTINTOS
 """
 
 import pandas as pd
@@ -26,11 +26,12 @@ def optimizar_ilp(df_desarrollos: pd.DataFrame,
                  debug: bool = True) -> List[Dict]:
     """
     Optimizador ILP mejorado - genera MÁS configuraciones
+    MODIFICADO: Genera hasta 4 PEDIDOS DISTINTOS por bobina (antes 3)
     """
     
     if debug:
         print(f"\n{'='*80}")
-        print(f"🔬 OPTIMIZADOR ILP V3 - MEJORADO")
+        print(f"🔬 OPTIMIZADOR ILP V3 - LÍMITE 4 PEDIDOS")
         print(f"{'='*80}\n")
     
     # Cargar datos
@@ -62,6 +63,7 @@ def optimizar_ilp(df_desarrollos: pd.DataFrame,
         print(f"📊 Pedidos: {len(pedidos)}")
         print(f"📊 Desperdicio máx: {desperdicio_bordes_maximo}mm")
         print(f"📊 KG máx bobina: {kg_max_bobina}kg")
+        print(f"📊 Límite: 4 pedidos distintos por bobina")
         print()
     
     # ============================================
@@ -69,7 +71,7 @@ def optimizar_ilp(df_desarrollos: pd.DataFrame,
     # ============================================
     
     if debug:
-        print(f"🎲 Generando configuraciones (VERSIÓN AMPLIADA)...")
+        print(f"🎲 Generando configuraciones (hasta 4 pedidos)...")
     
     bobinas_candidatas = []
     id_bobina = 0
@@ -203,6 +205,58 @@ def optimizar_ilp(df_desarrollos: pd.DataFrame,
                                             },
                                             'config_hash': config_hash
                                         })
+        
+        # ===== 4 PEDIDOS =====
+        # ✅ AÑADIDO: Bloque nuevo para 4 pedidos distintos (LÍNEAS 207-247)
+        for i, p1 in enumerate(pedidos_compatibles):
+            for j, p2 in enumerate(pedidos_compatibles[i+1:], i+1):
+                for k, p3 in enumerate(pedidos_compatibles[j+1:], j+1):
+                    for p4 in pedidos_compatibles[k+1:]:
+                        # Reducir iteraciones para controlar explosión combinatoria
+                        for n1 in range(1, min(8, max_cortes_por_pedido + 1)):
+                            for n2 in range(1, min(6, max_cortes_por_pedido + 1)):
+                                for n3 in range(1, min(6, max_cortes_por_pedido + 1)):
+                                    for n4 in range(1, min(6, max_cortes_por_pedido + 1)):
+                                        ancho_usado = (n1 * p1['ancho'] + 
+                                                     n2 * p2['ancho'] + 
+                                                     n3 * p3['ancho'] +
+                                                     n4 * p4['ancho'])
+                                        
+                                        if ancho_usado <= desarrollo['ancho']:
+                                            desperdicio = desarrollo['ancho'] - ancho_usado
+                                            
+                                            if desperdicio_bordes_minimo <= desperdicio <= desperdicio_bordes_maximo:
+                                                id_bobina += 1
+                                                kg_total_bobina = ml_max * constante_kg_des
+                                                ancho1 = n1 * p1['ancho']
+                                                ancho2 = n2 * p2['ancho']
+                                                ancho3 = n3 * p3['ancho']
+                                                ancho4 = n4 * p4['ancho']
+                                                const1 = 2.73 * desarrollo['espesor'] * (ancho1 / 1000)
+                                                const2 = 2.73 * desarrollo['espesor'] * (ancho2 / 1000)
+                                                const3 = 2.73 * desarrollo['espesor'] * (ancho3 / 1000)
+                                                const4 = 2.73 * desarrollo['espesor'] * (ancho4 / 1000)
+                                                
+                                                config_str = f"{desarrollo['ancho']}x{desarrollo['espesor']}|{n1}x{p1['ancho']}+{n2}x{p2['ancho']}+{n3}x{p3['ancho']}+{n4}x{p4['ancho']}"
+                                                config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
+                                                
+                                                bobinas_candidatas.append({
+                                                    'id': f"bob_{id_bobina}",
+                                                    'desarrollo_id': desarrollo['id'],
+                                                    'desarrollo': desarrollo,
+                                                    'cortes': {p1['id']: n1, p2['id']: n2, p3['id']: n3, p4['id']: n4},
+                                                    'ancho_usado': ancho_usado,
+                                                    'desperdicio': desperdicio,
+                                                    'metros_lineales': ml_max,
+                                                    'kg_totales': kg_total_bobina,
+                                                    'kg_por_pedido': {
+                                                        p1['id']: ml_max * const1,
+                                                        p2['id']: ml_max * const2,
+                                                        p3['id']: ml_max * const3,
+                                                        p4['id']: ml_max * const4
+                                                    },
+                                                    'config_hash': config_hash
+                                                })
     
     if debug:
         print(f"✅ Configuraciones generadas: {len(bobinas_candidatas)}")
@@ -382,7 +436,7 @@ def optimizar_ilp(df_desarrollos: pd.DataFrame,
         }
     
     return [{
-        'nombre': 'Solución ILP V3 Mejorado',
+        'nombre': 'Solución ILP V3 - 4 Pedidos',
         'num_bobinas': len(bobinas_usadas),
         'num_configuraciones': len(configs_usadas),
         'dataframe': df_resultado,
